@@ -17,6 +17,7 @@
       "title2": "远程桌面",
       "newAccounts": 0,
       "cookieIpCheck": false,
+      "allowedorigin": "desk.example.com,localhost,127.0.0.1",
       "userSessionIdleTimeout": -1,
       "sessionIdleTimeout": -1
     }

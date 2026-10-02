@@ -37,6 +37,64 @@ netstat -ano | findstr :3000
 
 修法：把 `cert` 改成带点号的 FQDN 形式，比如 `desk.example.com`（不需要真的能解析）。
 
+### 登录后报「HTTP 请求中的无效来源, 点击重新连接」
+
+页面能打开、能输密码，但一进去就弹这句，实际是主控制通道 `control.ashx` 的 **WebSocket 来源校验**没过。服务端会下发：
+
+```json
+{"action":"close","cause":"invalidorigin","msg":"invalidorigin"}
+```
+
+判定逻辑在 `webserver.js`：
+
+```js
+obj.CheckWebServerOriginName = function (domain, req) {
+    if (domain.allowedorigin === true) return true;
+    if (typeof req.headers.origin != 'string') return true;   // 无 Origin 头 = 桌面客户端
+    if (Array.isArray(domain.allowedorigin)) return (domain.allowedorigin.indexOf(originUrl.hostname) >= 0);
+    if (domain.dns != null) return (domain.dns == originUrl.hostname);
+    return (obj.getWebServerName(domain, req) == originUrl.hostname);
+}
+```
+
+而 `getWebServerName()` 在没有配 `dns` 时返回的是**证书 CN** —— 只有当 CN 恰好是 `un-configured` 才会退回用 `Host` 头。
+
+于是就形成一个死结：**为了让 MeshCentral 脱离 LAN-only 模式，你把 `cert` 设成了一个人造 FQDN**（`desk.example.com`），浏览器发来的 `Origin: https://你的真实域名` 自然永远对不上，连接被拒。
+
+修法：在 domain 里显式列出允许的来源主机名，然后重启 MeshCentral。
+
+```json
+"domains": {
+  "": {
+    "allowedorigin": "desk.example.com,localhost,127.0.0.1"
+  }
+}
+```
+
+- 逗号分隔，**别带空格**（源码是直接 `split(',')`，不去空格）
+- 必须包含**公网域名**；`localhost` / `127.0.0.1` 是为了让本机浏览器也能登录（装 Mesh Agent 时要用）
+- 不建议用 `"allowedorigin": true` 整个跳过
+
+**不动浏览器、不装任何东西的验证方法**：MeshCentral 自带 `ws` 依赖，在程序目录下建个脚本直接发起握手。
+
+```js
+// _wstest.js  —— 放到 <程序目录> 下执行：node _wstest.js
+const WebSocket = require('ws');
+const ws = new WebSocket('wss://127.0.0.1:3000/control.ashx', {
+  origin: 'https://你的域名',
+  rejectUnauthorized: false
+});
+ws.on('open',  () => console.log('握手 HTTP 101 成功'));
+ws.on('message', d => console.log('服务端说:', d.toString()));
+```
+
+判读结果：
+
+| 返回 | 含义 |
+| --- | --- |
+| `invalidorigin` | 来源校验没过，按上面的修 |
+| `noauth` | **来源校验已通过**，只是没带登录 Cookie —— 这正是期望结果 |
+
 ### 非管理员管不动这个服务
 
 服务跑在 `LocalSystem` 下。如果你的登录账号不在管理员组：
@@ -279,3 +337,20 @@ Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
 ```
 
 清干净再启动。
+
+**关键陷阱：只杀监听端口的那个子进程没用。**
+
+父子进程的关系是 `父 PPID=xxx → 子`，真正监听 3000 的是**子进程**。如果只按端口找到 PID 杀掉子进程，父进程还活着，会**立刻拉起一个新的子进程重新抢占 3000**；而你紧接着启动的新实例抢不到端口，就静默顺延到 **3001** —— 于是你以为改的配置没生效，其实生效在另一个端口上。
+
+`netstat` 里能同时看到 3000 和 3001 各占一个 PID，就是这种情况。
+
+正确做法是**把父子都杀掉**（用上面的 `Get-CimInstance` 列出来的所有 PID 一起 `Stop-Process`），确认 3000 / 3001 / 4433 / 81 全部释放，再启动单个实例。
+
+判断是否只剩单实例，看启动日志里这几行同时出现即可（端口无 `not available` 报错）：
+
+```
+MeshCentral HTTP redirection server running on port 80.
+MeshCentral v1.2.5, Hybrid (LAN + WAN) mode.
+MeshCentral Intel(R) AMT server running on desk.example.com:4433.
+MeshCentral HTTPS server running on desk.example.com:3000.
+```

@@ -129,6 +129,12 @@ node node_modules\meshcentral
     "": {
       "newAccounts": 0,             // 0 = 关闭自助注册，只有你预建的账号能登录
       "cookieIpCheck": false,       // 必须关：隧道出口 IP 会变，开了会频繁被踢下线
+
+      // 关键：显式列出「浏览器访问时用的主机名」。
+      // 上面 cert 是人造的 FQDN，和你的公网域名不一致，MeshCentral 的
+      // WebSocket 来源校验会因此拒绝连接，登录后报「HTTP 请求中的无效来源」。
+      // 逗号分隔、不要带空格；localhost / 127.0.0.1 是给本机访问用的。
+      "allowedorigin": "desk.example.com,localhost,127.0.0.1",
       "sessionIdleTimeout": -1,     // -1 = 不因空闲超时
       "userSessionIdleTimeout": -1
     }
@@ -298,6 +304,7 @@ scripts\uninstall-autostart.bat
 - `newAccounts: 0` —— 自助注册已关闭。别人就算拿到你的网址，也**注册不了**账号，只能用你预建的那个。
 - `_no2FactorAuth: true` —— 二次验证关闭。**这是为了满足「连接端只输密码」这个需求而牺牲的**。如果你的场景更看重安全，建议改回开启，或加上 Cloudflare Access 做一层 SSO。
 - `cookieIpCheck: false` —— 必须关。隧道出口 IP 会变化，开启会导致频繁掉线。
+- `allowedorigin` —— 只放行你自己那几个主机名。**这一层别用 `true` 跳过**，它是控制通道的跨站来源校验，公网暴露时有用。
 
 建议的加固手段：
 
