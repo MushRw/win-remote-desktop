@@ -220,20 +220,31 @@ scripts\start-tunnel.bat
 
 双击 [`scripts/setup-autostart.bat`](scripts/setup-autostart.bat)。它会**自动请求管理员权限**，UAC 弹窗点「是」，然后等它跑完。
 
-脚本按顺序做这几件事：
+脚本会自动从 `%USERPROFILE%\.cloudflared\` 读取隧道 UUID 和域名，不需要你手工填。
 
 | 步骤 | 动作 |
 | --- | --- |
-| 1 | 释放 3000 端口（停掉手动启动的临时实例） |
-| 2 | 把 MeshCentral 注册为 Windows 服务并启动（服务名 `meshcentral.exe`，账户 LocalSystem，开机自启） |
+| 1 | 释放 3000 端口（**只停 node 进程**，避免误杀监听同一端口的其他程序） |
+| 2 | 注册 MeshCentral 为 Windows 服务并启动（服务名 `meshcentral.exe`，账户 LocalSystem，开机自启） |
 | 3 | 把隧道凭据 `*.json` 和 `cert.pem` 复制到 `%SystemRoot%\System32\config\systemprofile\.cloudflared\` |
 | 4 | 在系统级目录生成对应的 `config.yml`（凭据路径改写为系统级绝对路径） |
-| 5 | `cloudflared service install`，修正注册表 ImagePath 指向系统级配置，启动服务 |
+| 5 | 创建**独立服务** `CloudflaredDesk` 指向该系统级配置 |
+| 6 | 启动服务并自检 |
 
-为什么必须提权、必须复制到那个奇怪的目录：
+### 为什么不直接用 `cloudflared service install`
+
+因为它用的是**全局唯一**的服务名 `Cloudflared`。
+
+如果你的机器上已经跑着另一条隧道（比如在 Cloudflare Dashboard 里建的、用 `--token` 装过服务的那种），执行 `cloudflared service install` 会**把它覆盖掉**；对应地，`cloudflared service uninstall` 会把它删掉。
+
+所以本方案改用 `sc create` 建一个名为 **`CloudflaredDesk`** 的独立服务，两条隧道并存互不干扰。卸载脚本同理，只删自己那一个。
+
+### 为什么必须提权、必须复制到那个奇怪的目录
 
 - 注册 Windows 服务本身需要管理员权限
 - **cloudflared 服务以 LocalSystem 账户运行，只读 `systemprofile` 下的配置**，这是官方文档明确的硬要求。放在 `%USERPROFILE%\.cloudflared\` 的那份它读不到（那份是给手动运行用的）
+
+另外服务配置了崩溃自动重启（5 秒 / 10 秒 / 30 秒，计数每天重置）。
 
 跑完之后两个服务都随开机自动运行，不用再管。
 
@@ -257,11 +268,24 @@ scripts\uninstall-autostart.bat
 | `config/cloudflared-config.example.yml` | 隧道配置模板 |
 | `docs/troubleshooting.md` | 踩过的坑与解法 |
 
-安装后的实际位置（不在仓库里）：
+### 程序本体的存放位置
+
+两种布局都支持，脚本会自动识别，不需要改任何路径：
+
+| 布局 | 位置 | 说明 |
+| --- | --- | --- |
+| A（推荐） | `<仓库目录>\app\` | 程序与脚本收在同一个项目目录下，已被 `.gitignore` 排除 |
+| B | `C:\mesh\` | 与仓库分离，作为默认回落位置 |
+
+探测顺序：`<脚本上一级>\app\` → `<脚本上一级>\` → `C:\mesh`
+
+想强制指定，把 `scripts/setup-autostart.bat` 顶部的 `MC_DIR` 填上即可。
+
+### 其余运行期位置
 
 | 位置 | 内容 |
 | --- | --- |
-| `C:\mesh\` | MeshCentral 程序本体、`meshcentral-data\`（配置 + 账号数据库） |
+| `<程序目录>\meshcentral-data\` | `config.json` 与账号数据库 `meshcentral.db` |
 | `%USERPROFILE%\.cloudflared\` | 隧道凭据 `<UUID>.json`、`cert.pem`、手动运行用的 `config.yml` |
 | `%SystemRoot%\System32\config\systemprofile\.cloudflared\` | 服务运行用的 `config.yml` 和凭据副本 |
 

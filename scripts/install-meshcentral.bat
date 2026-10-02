@@ -11,9 +11,15 @@ REM        Windows 服务注册失效（服务会秒退）。必须装在本地�
 REM =====================================================================
 
 REM ---------- 可按需修改 ----------
-set "APP=C:\mesh"
 set "PORT=3000"
 set "CERTNAME=desk.example.com"
+
+REM MeshCentral 安装位置。留空则自动探测，优先级：
+REM   本脚本上一级的 app\  >  上一级本身  >  C:\mesh
+set "APP="
+if not defined APP if exist "%~dp0..\app" for %%i in ("%~dp0..\app") do set "APP=%%~fi"
+if not defined APP if exist "%~dp0..\package.json" for %%i in ("%~dp0..") do set "APP=%%~fi"
+if not defined APP set "APP=C:\mesh"
 
 REM ---------- 环境检查 ----------
 where node >nul 2>&1

@@ -149,6 +149,62 @@ cloudflared tunnel --url https://127.0.0.1:3000 --no-tls-verify
 
 两份内容等价，只是 `credentials-file` 的绝对路径不同。`scripts/setup-autostart.bat` 会自动生成系统级那一份。
 
+### 不要用 `cloudflared service install`（会覆盖已有的隧道服务）
+
+`cloudflared service install` 固定使用服务名 **`Cloudflared`**。
+
+如果机器上已经有一条 dashboard 托管的隧道服务在跑，这条命令会直接覆盖它的 ImagePath；而 `cloudflared service uninstall` 会把它整个删掉。
+
+自检：
+
+```powershell
+Get-CimInstance Win32_Service -Filter "Name='Cloudflared'" |
+  Select-Object Name, State, PathName | Format-List
+```
+
+看 `PathName` 结尾是 `--token xxxxx` 还是 `--config=...`。前者说明是 dashboard 托管的隧道，**别动它**。
+
+本方案因此创建独立服务 `CloudflaredDesk`：
+
+```powershell
+Get-CimInstance Win32_Service -Filter "Name='CloudflaredDesk'" |
+  Select-Object Name, State, PathName | Format-List
+```
+
+### 搬迁程序目录之后
+
+MeshCentral 的服务注册里写死了 `WinService\daemon\meshcentral.exe` 的**绝对路径**，所以把程序目录移到别处之后：
+
+1. 旧服务会启动失败（找不到可执行文件）
+2. 需要以管理员身份重新跑一次 `scripts/setup-autostart.bat`。它会检测到服务路径已失效，自动 `sc delete` 旧注册，再从新位置执行 `--install`
+3. 隧道服务 `CloudflaredDesk` 的 `--config` 指向系统级目录，与程序目录无关，**不需改动**，但重启一下更稳妥
+
+搬迁前先停掉手动运行的实例，否则文件被占用：
+
+```powershell
+Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique |
+  ForEach-Object { Stop-Process -Id $_ -Force }
+```
+
+拷贝整个程序目录用 `robocopy`（能处理 node_modules 里的超长路径）：
+
+```powershell
+robocopy "C:\mesh" "D:\code\deskremote\app" /E /R:1 /W:1 /MT:16
+```
+
+> **注意**：不要在 Git Bash（MSYS）里跑这条命令。MSYS 的路径自动转换会把 `/E` 这类参数和 `E:\` 开头的目标路径搞乱，报「错误: 无效参数 #3」，然后什么也没拷。用 PowerShell 或 cmd。
+
+搬迁完成后核对一下：
+
+```powershell
+# 文件数应一致
+(Get-ChildItem -Recurse -File "C:\mesh").Count
+(Get-ChildItem -Recurse -File "D:\code\deskremote\app").Count
+```
+
+确认无误再删除旧目录。
+
 ### 改了配置怎么生效
 
 ```bat
@@ -160,7 +216,7 @@ net start cloudflared
 
 ### 服务注册要管理员
 
-`cloudflared service install` 和 node-windows 的 `--install` 都需要管理员权限，绕不过去。`setup-autostart.bat` 里已经内置了自提权。
+`sc create`、`cloudflared service install`、node-windows 的 `--install` 都需要管理员权限，绕不过去。`setup-autostart.bat` 里已经内置了自提权（`Start-Process -Verb RunAs`），双击即可。
 
 ### `%USERPROFILE%` 在高权限窗口里指向不对
 
