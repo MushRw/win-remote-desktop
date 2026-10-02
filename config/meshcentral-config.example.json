@@ -1,0 +1,24 @@
+{
+  "settings": {
+    "port": 3000,
+    "cert": "desk.example.com",
+    "auth": "users",
+    "minify": true,
+    "rendezv": true,
+    "webRTC": true,
+    "allowHighQualityDesktop": true,
+    "_no2FactorAuth": true,
+    "maxInvalidLogin": { "time": 10, "count": 20, "coolofftime": 10 },
+    "logs": { "authFailures": true, "loginTimeout": 0 }
+  },
+  "domains": {
+    "": {
+      "title": "Remote Desktop",
+      "title2": "远程桌面",
+      "newAccounts": 0,
+      "cookieIpCheck": false,
+      "userSessionIdleTimeout": -1,
+      "sessionIdleTimeout": -1
+    }
+  }
+}

@@ -1,0 +1,49 @@
+# ---- 凭据 / 密钥（绝对不要提交）----
+*.pem
+*.key
+*.p12
+*.pfx
+*.json.tmp
+
+# Cloudflare 隧道凭据（文件名就是隧道 UUID）
+[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-*.json
+
+# ---- MeshCentral 运行时数据 ----
+meshcentral-data/
+meshcentral-backups/
+meshcentral-files/
+meshcentral-web/
+node_modules/
+package-lock.json
+WinService/
+
+# 真正在跑的配置（含真实域名/密码策略），仓库里只留 .example 模板
+config.json
+config.yml
+!config/*.example.json
+!config/*.example.yml
+
+# ---- 记录账号密码的文本 ----
+ACCOUNT.txt
+账号*.txt
+*password*.txt
+*密码*.txt
+
+# ---- 日志 / 临时文件 ----
+*.log
+*.err
+*.out
+*.wrapper.log
+_procs.txt
+_p*.txt
+_s*.txt
+_zones.js
+*.tmp
+*.bak
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

@@ -1,0 +1,28 @@
+# Cloudflare 命名隧道配置模板
+#
+# 放到: %USERPROFILE%\.cloudflared\config.yml
+# 然后把下面两处占位符换成你自己的值：
+#   <TUNNEL-UUID>  ->  cloudflared tunnel create 输出的 UUID
+#                       同时也是 %USERPROFILE%\.cloudflared\ 下的凭据文件名
+#   <你的用户名>    ->  Windows 用户名
+#   desk.example.com -> 你要用的域名（需已接入 Cloudflare）
+
+tunnel: <TUNNEL-UUID>
+credentials-file: C:\Users\<你的用户名>\.cloudflared\<TUNNEL-UUID>.json
+
+ingress:
+  # 固定入口：连接端只要浏览器打开这个地址 + 输 MeshCentral 的账号密码
+  - hostname: desk.example.com
+
+    # 必须写 127.0.0.1 而不是 localhost。
+    # MeshCentral 只监听 IPv4，而 cloudflared 会把 localhost 解析成
+    # IPv6 的 ::1，回源会直接报 connection refused。
+    service: https://127.0.0.1:3000
+
+    originRequest:
+      # MeshCentral 用的是自签证书，必须跳过本机这一段 TLS 校验。
+      # 对外那层是 Cloudflare 签发的真证书，浏览器不会有任何警告。
+      noTLSVerify: true
+
+  # 兜底：没匹配到上面 hostname 的请求一律 404
+  - service: http_status:404
