@@ -20,6 +20,9 @@ WinService/
 # 本地运行时目录：MeshCentral 程序本体的推荐存放位置（见 README）
 app/
 
+# 本地私有笔记（含真实域名、凭据、账号说明等，绝不提交）
+notes/
+
 # 真正在跑的配置（含真实域名/密码策略），仓库里只留 .example 模板
 config.json
 config.yml
